@@ -20,6 +20,14 @@
       "nothing much < 3",
       "nothing much < 3",
     ],
+    facultyPercentages: {
+      always: 80,
+      often: 20,
+      sometimes: 0,
+      seldom: 0,
+      never: 0,
+    },
+    facultyComment: "Very good instructor! Keeps the class active.",
   };
 
   const RADIO_OPTIONS = {
@@ -37,11 +45,44 @@
     },
   };
 
+  const FACULTY_RADIO_OPTIONS = {
+    always: {
+      index: 30,
+      label: "Always Manifested",
+    },
+    often: {
+      index: 29,
+      label: "Often Manifested",
+    },
+    sometimes: {
+      index: 28,
+      label: "Sometimes Manifested",
+    },
+    seldom: {
+      index: 27,
+      label: "Seldom Manifested",
+    },
+    never: {
+      index: 26,
+      label: "Never/Rarely Manifested",
+    },
+  };
+
+  function getEvaluationType() {
+    if (location.hostname !== "portal.usep.edu.ph") {
+      return null;
+    }
+    if (location.pathname.includes("/university-services-evaluation/subject")) {
+      return "subject";
+    }
+    if (location.pathname.includes("/university-services-evaluation/faculty")) {
+      return "faculty";
+    }
+    return null;
+  }
+
   function isEvaluationPage() {
-    return (
-      location.hostname === "portal.usep.edu.ph" &&
-      location.pathname.includes("/university-services-evaluation/subject")
-    );
+    return getEvaluationType() !== null;
   }
 
   function hideLegacyRoot() {
@@ -81,6 +122,26 @@
         commentAnswers: [0, 1, 2].map((index) => {
           return String(saved.commentAnswers?.[index] ?? defaults.commentAnswers[index]);
         }),
+        facultyPercentages: {
+          always: Number.isFinite(Number(saved.facultyPercentages?.always))
+            ? Number(saved.facultyPercentages.always)
+            : defaults.facultyPercentages.always,
+          often: Number.isFinite(Number(saved.facultyPercentages?.often))
+            ? Number(saved.facultyPercentages.often)
+            : defaults.facultyPercentages.often,
+          sometimes: Number.isFinite(Number(saved.facultyPercentages?.sometimes))
+            ? Number(saved.facultyPercentages.sometimes)
+            : defaults.facultyPercentages.sometimes,
+          seldom: Number.isFinite(Number(saved.facultyPercentages?.seldom))
+            ? Number(saved.facultyPercentages.seldom)
+            : defaults.facultyPercentages.seldom,
+          never: Number.isFinite(Number(saved.facultyPercentages?.never))
+            ? Number(saved.facultyPercentages.never)
+            : defaults.facultyPercentages.never,
+        },
+        facultyComment: saved.facultyComment !== undefined
+          ? String(saved.facultyComment)
+          : defaults.facultyComment,
       };
     } catch {
       return defaults;
@@ -147,20 +208,28 @@
     return question.replace(/\bREQUIRED\b/gi, "").trim().replace(/\s+/g, " ");
   }
 
-  function getTextareas() {
-    return [
-      ...document.querySelectorAll(
-        'textarea[id^="course-evaluation-paramQuestion-"]'
-      ),
-    ].sort((a, b) => {
-      const aNumber = Number((a.id || "").split("-").pop());
-      const bNumber = Number((b.id || "").split("-").pop());
-      return aNumber - bNumber;
-    });
+  function getTextareas(evalType) {
+    if (evalType === "subject") {
+      return [
+        ...document.querySelectorAll(
+          'textarea[id^="course-evaluation-paramQuestion-"]'
+        ),
+      ].sort((a, b) => {
+        const aNumber = Number((a.id || "").split("-").pop());
+        const bNumber = Number((b.id || "").split("-").pop());
+        return aNumber - bNumber;
+      });
+    } else {
+      return [
+        ...document.querySelectorAll(
+          'textarea[id^="faculty-evaluation=comments-"]'
+        ),
+      ];
+    }
   }
 
   function getQuestionLabels() {
-    const textareas = getTextareas();
+    const textareas = getTextareas("subject");
     const numericQuestions = textareas.slice(0, 3).map(getQuestionText);
     const commentQuestions = textareas.slice(3, 6).map(getQuestionText);
 
@@ -192,12 +261,12 @@
     });
   }
 
-  function validatePercentages(percentages) {
-    const values = [
-      percentages.stronglyAgree,
-      percentages.agree,
-      percentages.neutral,
-    ];
+  function validatePercentages(percentages, type) {
+    const keys = type === "subject"
+      ? ["stronglyAgree", "agree", "neutral"]
+      : ["always", "often", "sometimes", "seldom", "never"];
+
+    const values = keys.map((key) => percentages[key]);
 
     if (values.some((value) => !Number.isFinite(value) || value < 0 || value > 100)) {
       throw new Error("Percentages must be numbers from 0 to 100.");
@@ -209,10 +278,13 @@
     }
   }
 
-  function buildChoices(groupCount, percentages) {
-    validatePercentages(percentages);
+  function buildChoices(groupCount, percentages, type) {
+    validatePercentages(percentages, type);
 
-    const optionKeys = ["stronglyAgree", "agree", "neutral"];
+    const optionKeys = type === "subject"
+      ? ["stronglyAgree", "agree", "neutral"]
+      : ["always", "often", "sometimes", "seldom", "never"];
+
     const rawCounts = optionKeys.map((key) => {
       const exact = (groupCount * percentages[key]) / 100;
       return {
@@ -240,20 +312,42 @@
   }
 
   function readPanelSettings(shadowRoot) {
-    const percentage = (key) => {
-      return Number(shadowRoot.querySelector(`[data-percent="${key}"]`).value);
-    };
-    const value = (selector) => shadowRoot.querySelector(selector).value;
+    const evalType = getEvaluationType();
+    const currentSettings = loadSettings();
 
-    return {
-      percentages: {
-        stronglyAgree: percentage("stronglyAgree"),
-        agree: percentage("agree"),
-        neutral: percentage("neutral"),
-      },
-      numericAnswers: [0, 1, 2].map((index) => value(`[data-numeric="${index}"]`)),
-      commentAnswers: [0, 1, 2].map((index) => value(`[data-comment="${index}"]`)),
+    const percentage = (key) => {
+      const el = shadowRoot.querySelector(`[data-percent="${key}"]`);
+      return el ? Number(el.value) : 0;
     };
+    const value = (selector) => {
+      const el = shadowRoot.querySelector(selector);
+      return el ? el.value : "";
+    };
+
+    if (evalType === "subject") {
+      return {
+        ...currentSettings,
+        percentages: {
+          stronglyAgree: percentage("stronglyAgree"),
+          agree: percentage("agree"),
+          neutral: percentage("neutral"),
+        },
+        numericAnswers: [0, 1, 2].map((index) => value(`[data-numeric="${index}"]`)),
+        commentAnswers: [0, 1, 2].map((index) => value(`[data-comment="${index}"]`)),
+      };
+    } else {
+      return {
+        ...currentSettings,
+        facultyPercentages: {
+          always: percentage("always"),
+          often: percentage("often"),
+          sometimes: percentage("sometimes"),
+          seldom: percentage("seldom"),
+          never: percentage("never"),
+        },
+        facultyComment: value(`[data-faculty-comment]`),
+      };
+    }
   }
 
   function escapeHtml(value) {
@@ -268,22 +362,26 @@
   }
 
   function fillEvaluationForm(settings) {
-    validatePercentages(settings.percentages);
+    const evalType = getEvaluationType();
+    const percentages = evalType === "subject" ? settings.percentages : settings.facultyPercentages;
+    const radioOptions = evalType === "subject" ? RADIO_OPTIONS : FACULTY_RADIO_OPTIONS;
+
+    validatePercentages(percentages, evalType);
 
     const radioGroups = getRadioGroups();
     const groupNames = getSortedGroupNames(radioGroups);
-    const textareas = getTextareas();
+    const textareas = getTextareas(evalType);
 
     if (groupNames.length === 0 && textareas.length === 0) {
       throw new Error("No evaluation inputs found on this page.");
     }
 
-    const choices = buildChoices(groupNames.length, settings.percentages);
+    const choices = buildChoices(groupNames.length, percentages, evalType);
     const selected = groupNames.map((groupName, index) => {
       const radios = radioGroups.get(groupName).sort(naturalRadioSort);
       const choice = choices[index];
       const radio = radios.find((item) => {
-        return Number((item.id || "").split("-").pop()) === RADIO_OPTIONS[choice].index;
+        return Number((item.id || "").split("-").pop()) === radioOptions[choice].index;
       });
 
       if (!radio) {
@@ -306,10 +404,11 @@
     });
 
     const filledTextareas = textareas.map((textarea, index) => {
-      const value =
-        index < settings.numericAnswers.length
-          ? settings.numericAnswers[index]
-          : settings.commentAnswers[index - settings.numericAnswers.length] || "";
+      const value = evalType === "subject"
+        ? (index < settings.numericAnswers.length
+            ? settings.numericAnswers[index]
+            : settings.commentAnswers[index - settings.numericAnswers.length] || "")
+        : settings.facultyComment || "";
 
       setElementValue(textarea, value);
       return {
@@ -328,30 +427,40 @@
       );
     }
 
+    const counts = evalType === "subject"
+      ? { stronglyAgree: 0, agree: 0, neutral: 0 }
+      : { always: 0, often: 0, sometimes: 0, seldom: 0, never: 0 };
+
+    selected.forEach((item) => {
+      counts[item.choice] += 1;
+    });
+
     return {
-      counts: selected.reduce(
-        (counts, item) => {
-          counts[item.choice] += 1;
-          return counts;
-        },
-        {
-          stronglyAgree: 0,
-          agree: 0,
-          neutral: 0,
-        }
-      ),
+      counts,
       textareaCount: filledTextareas.length,
     };
   }
 
   function setStatus(shadowRoot, text, state) {
+    const evalType = getEvaluationType();
     const status = shadowRoot.querySelector("[data-usep-status]");
     const fillButton = shadowRoot.querySelector("[data-usep-fill]");
     const settings = readPanelSettings(shadowRoot);
-    const total =
-      settings.percentages.stronglyAgree +
-      settings.percentages.agree +
-      settings.percentages.neutral;
+
+    let total = 0;
+    if (evalType === "subject") {
+      total =
+        settings.percentages.stronglyAgree +
+        settings.percentages.agree +
+        settings.percentages.neutral;
+    } else {
+      total =
+        settings.facultyPercentages.always +
+        settings.facultyPercentages.often +
+        settings.facultyPercentages.sometimes +
+        settings.facultyPercentages.seldom +
+        settings.facultyPercentages.never;
+    }
 
     status.textContent = text || `Total: ${total}%`;
     status.dataset.state = state || (Math.abs(total - 100) <= 0.001 ? "ok" : "error");
@@ -359,6 +468,11 @@
   }
 
   function renderLabels(shadowRoot) {
+    const evalType = getEvaluationType();
+    if (evalType !== "subject") {
+      return;
+    }
+
     const { numericQuestions, commentQuestions } = getQuestionLabels();
 
     numericQuestions.forEach((question, index) => {
@@ -395,6 +509,7 @@
     }
 
     const settings = loadSettings();
+    const evalType = getEvaluationType();
     const host = document.createElement("div");
     host.id = ROOT_ID;
     host.style.position = "fixed";
@@ -403,6 +518,88 @@
     host.style.zIndex = "2147483647";
 
     const shadowRoot = host.attachShadow({ mode: "closed" });
+
+    let bodyHtml = "";
+    if (evalType === "subject") {
+      bodyHtml = `
+          <div class="section">
+            <div class="section-title">Ratings</div>
+            <div class="row">
+              <label for="usep-strongly-agree">Strongly Agree %</label>
+              <input class="percent-input" id="usep-strongly-agree" data-percent="stronglyAgree" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.percentages.stronglyAgree)}">
+            </div>
+            <div class="row">
+              <label for="usep-agree">Agree %</label>
+              <input class="percent-input" id="usep-agree" data-percent="agree" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.percentages.agree)}">
+            </div>
+            <div class="row">
+              <label for="usep-neutral">Neutral %</label>
+              <input class="percent-input" id="usep-neutral" data-percent="neutral" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.percentages.neutral)}">
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Answer to numerical questions</div>
+            <div class="row">
+              <label data-numeric-label="0" for="usep-numeric-0">Question 1</label>
+              <input id="usep-numeric-0" data-numeric="0" type="text" value="${escapeAttribute(settings.numericAnswers[0])}">
+            </div>
+            <div class="row">
+              <label data-numeric-label="1" for="usep-numeric-1">Question 2</label>
+              <input id="usep-numeric-1" data-numeric="1" type="text" value="${escapeAttribute(settings.numericAnswers[1])}">
+            </div>
+            <div class="row">
+              <label data-numeric-label="2" for="usep-numeric-2">Question 3</label>
+              <input id="usep-numeric-2" data-numeric="2" type="text" value="${escapeAttribute(settings.numericAnswers[2])}">
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Answer to forms</div>
+            <label data-comment-label="0" for="usep-comment-0">Q1</label>
+            <textarea id="usep-comment-0" data-comment="0">${escapeHtml(settings.commentAnswers[0])}</textarea>
+            <label data-comment-label="1" for="usep-comment-1">Q2</label>
+            <textarea id="usep-comment-1" data-comment="1">${escapeHtml(settings.commentAnswers[1])}</textarea>
+            <label data-comment-label="2" for="usep-comment-2">Q3</label>
+            <textarea id="usep-comment-2" data-comment="2">${escapeHtml(settings.commentAnswers[2])}</textarea>
+          </div>
+      `;
+    } else {
+      bodyHtml = `
+          <div class="section">
+            <div class="section-title">Ratings</div>
+            <div class="row">
+              <label for="usep-always">Always Manifested %</label>
+              <input class="percent-input" id="usep-always" data-percent="always" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.facultyPercentages.always)}">
+            </div>
+            <div class="row">
+              <label for="usep-often">Often Manifested %</label>
+              <input class="percent-input" id="usep-often" data-percent="often" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.facultyPercentages.often)}">
+            </div>
+            <div class="row">
+              <label for="usep-sometimes">Sometimes Manifested %</label>
+              <input class="percent-input" id="usep-sometimes" data-percent="sometimes" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.facultyPercentages.sometimes)}">
+            </div>
+            <div class="row">
+              <label for="usep-seldom">Seldom Manifested %</label>
+              <input class="percent-input" id="usep-seldom" data-percent="seldom" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.facultyPercentages.seldom)}">
+            </div>
+            <div class="row">
+              <label for="usep-never">Never/Rarely %</label>
+              <input class="percent-input" id="usep-never" data-percent="never" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.facultyPercentages.never)}">
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Comments / Suggestions</div>
+            <label for="usep-faculty-comment">Other Comments and Suggestions</label>
+            <textarea id="usep-faculty-comment" data-faculty-comment>${escapeHtml(settings.facultyComment)}</textarea>
+          </div>
+      `;
+    }
+
+    const titleText = evalType === "subject" ? "Fill evaluation form" : "Fill faculty form";
+
     shadowRoot.innerHTML = `
       <style>
         :host {
@@ -618,53 +815,12 @@
       <button class="fab" type="button" data-expand>Maximize</button>
       <div class="panel">
         <div class="header">
-          <div class="title">Fill evaluation form</div>
+          <div class="title">${titleText}</div>
           <button class="collapse" type="button" data-collapse>Minimize</button>
         </div>
 
         <div class="body">
-          <div class="section">
-            <div class="section-title">Ratings</div>
-            <div class="row">
-              <label for="usep-strongly-agree">Strongly Agree %</label>
-              <input class="percent-input" id="usep-strongly-agree" data-percent="stronglyAgree" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.percentages.stronglyAgree)}">
-            </div>
-            <div class="row">
-              <label for="usep-agree">Agree %</label>
-              <input class="percent-input" id="usep-agree" data-percent="agree" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.percentages.agree)}">
-            </div>
-            <div class="row">
-              <label for="usep-neutral">Neutral %</label>
-              <input class="percent-input" id="usep-neutral" data-percent="neutral" type="number" min="0" max="100" step="1" value="${escapeAttribute(settings.percentages.neutral)}">
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">Answer to numerical questions</div>
-            <div class="row">
-              <label data-numeric-label="0" for="usep-numeric-0">Question 1</label>
-              <input id="usep-numeric-0" data-numeric="0" type="text" value="${escapeAttribute(settings.numericAnswers[0])}">
-            </div>
-            <div class="row">
-              <label data-numeric-label="1" for="usep-numeric-1">Question 2</label>
-              <input id="usep-numeric-1" data-numeric="1" type="text" value="${escapeAttribute(settings.numericAnswers[1])}">
-            </div>
-            <div class="row">
-              <label data-numeric-label="2" for="usep-numeric-2">Question 3</label>
-              <input id="usep-numeric-2" data-numeric="2" type="text" value="${escapeAttribute(settings.numericAnswers[2])}">
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">Answer to forms</div>
-            <label data-comment-label="0" for="usep-comment-0">Q1</label>
-            <textarea id="usep-comment-0" data-comment="0">${escapeHtml(settings.commentAnswers[0])}</textarea>
-            <label data-comment-label="1" for="usep-comment-1">Q2</label>
-            <textarea id="usep-comment-1" data-comment="1">${escapeHtml(settings.commentAnswers[1])}</textarea>
-            <label data-comment-label="2" for="usep-comment-2">Q3</label>
-            <textarea id="usep-comment-2" data-comment="2">${escapeHtml(settings.commentAnswers[2])}</textarea>
-          </div>
-
+          ${bodyHtml}
           <div data-usep-status>Total: 100%</div>
           <div class="actions">
             <button class="secondary" type="button" data-reset>Reset</button>
@@ -707,13 +863,22 @@
     shadowRoot.querySelector("[data-usep-fill]").addEventListener("click", () => {
       try {
         const nextSettings = readPanelSettings(shadowRoot);
-        validatePercentages(nextSettings.percentages);
+        const currentPercentages = evalType === "subject"
+          ? nextSettings.percentages
+          : nextSettings.facultyPercentages;
+
+        validatePercentages(currentPercentages, evalType);
         saveSettings(nextSettings);
         setStatus(shadowRoot, "Filling...", "busy");
         const summary = fillEvaluationForm(nextSettings);
+
+        const doneText = evalType === "subject"
+          ? `Done: ${summary.counts.stronglyAgree} Strongly Agree, ${summary.counts.agree} Agree, ${summary.counts.neutral} Neutral.`
+          : `Done: ${summary.counts.always} Always, ${summary.counts.often} Often, ${summary.counts.sometimes} Sometimes, ${summary.counts.seldom} Seldom, ${summary.counts.never} Never.`;
+
         setStatus(
           shadowRoot,
-          `Done: ${summary.counts.stronglyAgree} Strongly Agree, ${summary.counts.agree} Agree, ${summary.counts.neutral} Neutral. Submit was not clicked.`,
+          `${doneText} Submit was not clicked.`,
           "done"
         );
       } catch (error) {

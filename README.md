@@ -4,11 +4,16 @@ This unpacked Chrome extension adds a floating fill panel to:
 
 `https://portal.usep.edu.ph/university-services-evaluation/subject`
 
-The panel lets you set:
+The panel adapts automatically depending on the page:
 
+### For Course Evaluation:
 - Strongly Agree, Agree, and Neutral percentages
 - Three numerical answers
 - Three free-form answers
+
+### For Faculty Evaluation:
+- Always, Often, Sometimes, Seldom, and Never/Rarely Manifested percentages
+- One overall comments / suggestions field
 
 The percentages must add up to `100%`. Clicking `Fill` fills the visible evaluation form and does not click `Submit`.
 
@@ -21,7 +26,7 @@ The percentages must add up to `100%`. Clicking `Fill` fills the visible evaluat
 5. Click `Load unpacked`.
 6. Select the extracted folder.
 
-After that, open a course evaluation page, adjust the floating panel, and click `Fill`.
+After that, open a course or faculty evaluation page, adjust the floating panel, and click `Fill`.
 Use `Minimize` to collapse the panel and `Maximize` to open it again.
 
 ## Install From Source
@@ -37,7 +42,7 @@ Use `Minimize` to collapse the panel and `Maximize` to open it again.
 From the repository root:
 
 ```bash
-zip -r usep-eval-fill-button-v1.1.3.zip manifest.json content.js README.md LICENSE
+zip -r usep-eval-fill-button-v1.1.5.zip manifest.json content.js README.md LICENSE
 ```
 
 The zip is meant for unpacked installation. Publishing through the Chrome Web Store requires a Chrome Web Store developer account and manual review.
