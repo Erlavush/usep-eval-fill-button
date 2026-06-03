@@ -426,9 +426,12 @@
           color: #111827;
           display: grid;
           gap: 10px;
-          max-height: min(680px, calc(100vh - 36px));
-          overflow: auto;
+          max-height: calc(100vh - 36px);
+          max-height: calc(100dvh - 36px);
+          overflow-x: hidden;
+          overflow-y: auto;
           padding: 12px;
+          scrollbar-gutter: stable;
           width: min(340px, calc(100vw - 36px));
         }
 

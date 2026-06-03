@@ -37,7 +37,7 @@ Use `Minimize` to collapse the panel and `Maximize` to open it again.
 From the repository root:
 
 ```bash
-zip -r usep-eval-fill-button-v1.1.2.zip manifest.json content.js README.md LICENSE
+zip -r usep-eval-fill-button-v1.1.3.zip manifest.json content.js README.md LICENSE
 ```
 
 The zip is meant for unpacked installation. Publishing through the Chrome Web Store requires a Chrome Web Store developer account and manual review.
